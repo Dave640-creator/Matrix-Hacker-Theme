@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matrix Hacker Terminal</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+
+  :root {
+    --green: #00ff41;
+    --green-dim: #00cc33;
+    --green-dark: #003b00;
+    --green-glow: rgba(0,255,65,0.15);
+    --bg: #0a0a0a;
+    --bg2: #0d0d0d;
+    --scanline: rgba(0,255,65,0.03);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    overflow-x: hidden;
+    min-height: 100vh;
+    cursor: crosshair;
+  }
+
+  /* Scanlines overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      var(--scanline) 2px,
+      var(--scanline) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+    animation: scanFlicker 8s infinite;
+  }
+
+  /* CRT flicker on top */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none;
+    z-index: 9998;
+  }
+
+  @keyframes scanFlicker {
+    0%,95%,100% { opacity: 1; }
+    96% { opacity: 0.92; }
+    97% { opacity: 1; }
+    98% { opacity: 0.88; }
+  }
+
+  /* Canvas rain */
+  #matrix-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    opacity: 0.45;
+  }
+
+  .container {
+    position: relative;
+    z-index: 10;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 16px;
+  }
+
+  /* Panel base */
+  .panel {
+    background: rgba(0,10,0,0.88);
+    border: 1px solid var(--green-dim);
+    box-shadow: 0 0 16px rgba(0,255,65,0.12), inset 0 0 30px rgba(0,255,65,0.03);
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+    animation: scanLine 3s linear infinite;
+  }
+
+  @keyframes scanLine {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  .panel-title {
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    letter-spacing: 3px;
+    color: var(--green);
+    text-shadow: 0 0 10px var(--green);
+    border-bottom: 1px solid rgba(0,255,65,0.2);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: blink 1.4s infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.2; } }
+
+  /* ── HEADER ── */
+  .header {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 24px 16px;
+  }
+
+  .header h1 {
+    font-family: 'VT323', monospace;
+    font-size: clamp(40px, 8vw, 80px);
+    letter-spacing: 12px;
+    text-shadow: 0 0 20px var(--green), 0 0 60px rgba(0,255,65,0.4);
+    animation: glitch 5s infinite;
+    line-height: 1;
+  }
+
+  @keyframes glitch {
+    0%,90%,100% { text-shadow: 0 0 20px var(--green), 0 0 60px rgba(0,255,65,0.4); transform: translate(0); }
+    91% { transform: translate(-2px, 0); text-shadow: -2px 0 #f00, 2px 0 #0ff; }
+    92% { transform: translate(2px, 0); text-shadow: 2px 0 #f00, -2px 0 #0ff; }
+    93% { transform: translate(0); text-shadow: 0 0 20px var(--green), 0 0 60px rgba(0,255,65,0.4); }
+    94% { transform: translate(-1px, 1px); text-shadow: -1px 0 #f00, 1px 0 #0ff; }
+    95% { transform: translate(0); text-shadow: 0 0 20px var(--green), 0 0 60px rgba(0,255,65,0.4); }
+  }
+
+  .header .subtitle {
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    color: var(--green-dim);
+    letter-spacing: 6px;
+    margin-top: 8px;
+    opacity: 0.7;
+  }
+
+  /* ── TERMINAL ── */
+  .terminal {
+    grid-column: 1 / -1;
+    height: 220px;
+    overflow: hidden;
+  }
+
+  .terminal-body {
+    font-size: 13px;
+    line-height: 1.7;
+    height: 160px;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .terminal-body::-webkit-scrollbar { display: none; }
+
+  .line { display: flex; gap: 8px; }
+  .prompt { color: #00ff41; opacity: 0.6; flex-shrink: 0; }
+  .line.error .text { color: #ff3333; text-shadow: 0 0 8px #ff3333; }
+  .line.warn .text { color: #ffaa00; text-shadow: 0 0 8px #ffaa00; }
+  .line.success .text { color: #00ff41; text-shadow: 0 0 6px #00ff41; }
+  .line.info .text { color: #00ccff; text-shadow: 0 0 6px #00ccff; }
+  .line.dim .text { opacity: 0.4; }
+
+  .terminal-input {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    align-items: center;
+    border-top: 1px solid rgba(0,255,65,0.15);
+    padding-top: 10px;
+  }
+
+  .terminal-input .prompt { color: var(--green); }
+
+  #cmd-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    flex: 1;
+    caret-color: var(--green);
+  }
+
+  /* ── NETWORK MAP ── */
+  #network-canvas {
+    width: 100%;
+    height: 200px;
+    display: block;
+  }
+
+  /* ── SYSTEM STATS ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .stat-item { }
+
+  .stat-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--green-dim);
+    opacity: 0.6;
+    margin-bottom: 4px;
+  }
+
+  .stat-value {
+    font-family: 'VT323', monospace;
+    font-size: 26px;
+    text-shadow: 0 0 10px var(--green);
+    line-height: 1;
+  }
+
+  .stat-bar {
+    height: 4px;
+    background: rgba(0,255,65,0.1);
+    margin-top: 4px;
+    border: 1px solid rgba(0,255,65,0.2);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-bar-fill {
+    height: 100%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    transition: width 0.5s;
+  }
+
+  /* ── ACTIVITY FEED ── */
+  .feed { font-size: 11px; line-height: 1.9; max-height: 200px; overflow: hidden; }
+  .feed-item { display: flex; gap: 8px; animation: fadeIn 0.3s; }
+  .feed-time { opacity: 0.4; flex-shrink: 0; }
+  .feed-msg { }
+  .feed-msg.threat { color: #ff4444; text-shadow: 0 0 4px #ff4444; }
+  .feed-msg.breach { color: #ff8800; text-shadow: 0 0 4px #ff8800; }
+  .feed-msg.ok { color: #00ff41; }
+
+  @keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── ENCRYPTION PANEL ── */
+  .cipher-display {
+    font-size: 11px;
+    letter-spacing: 1px;
+    line-height: 2;
+    opacity: 0.7;
+    word-break: break-all;
+    height: 80px;
+    overflow: hidden;
+  }
+
+  .cipher-key {
+    margin-top: 12px;
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    color: #00ccff;
+    text-shadow: 0 0 8px #00ccff;
+    letter-spacing: 3px;
+  }
+
+  /* ── HEX DUMP ── */
+  .hex-dump {
+    font-size: 10px;
+    line-height: 2;
+    opacity: 0.65;
+    height: 100px;
+    overflow: hidden;
+    word-break: break-all;
+  }
+  .hex-addr { color: #0088ff; margin-right: 8px; }
+  .hex-val { }
+  .hex-ascii { color: #00ff88; margin-left: 8px; opacity: 0.5; }
+
+  /* corner decorations */
+  .corner { position: absolute; width: 12px; height: 12px; }
+  .corner.tl { top: 4px; left: 4px; border-top: 1px solid var(--green); border-left: 1px solid var(--green); }
+  .corner.tr { top: 4px; right: 4px; border-top: 1px solid var(--green); border-right: 1px solid var(--green); }
+  .corner.bl { bottom: 4px; left: 4px; border-bottom: 1px solid var(--green); border-left: 1px solid var(--green); }
+  .corner.br { bottom: 4px; right: 4px; border-bottom: 1px solid var(--green); border-right: 1px solid var(--green); }
+
+  .full-width { grid-column: 1 / -1; }
+
+  /* clock */
+  #clock {
+    font-family: 'VT323', monospace;
+    font-size: 36px;
+    text-shadow: 0 0 14px var(--green);
+    margin-top: 8px;
+    letter-spacing: 4px;
+  }
+
+  .ip-list { font-size: 11px; line-height: 2; }
+  .ip-entry { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(0,255,65,0.07); }
+  .ip-addr { color: #00ccff; text-shadow: 0 0 4px #00ccff; }
+  .ip-status { }
+  .ip-status.active { color: var(--green); }
+  .ip-status.scanning { color: #ffaa00; animation: blink 0.8s infinite; }
+  .ip-status.blocked { color: #ff3333; }
+</style>
+</head>
+<body>
+
+<canvas id="matrix-canvas"></canvas>
+
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="panel header">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <h1>[ MATRIX ]</h1>
+    <div class="subtitle">// SYSTEM ACCESS GRANTED — ENCRYPTION LAYER ACTIVE //</div>
+    <div id="clock">00:00:00</div>
+  </div>
+
+  <!-- TERMINAL -->
+  <div class="panel terminal full-width">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="panel-title"><div class="status-dot"></div>ROOT TERMINAL — /dev/tty0</div>
+    <div class="terminal-body" id="term-body"></div>
+    <div class="terminal-input">
+      <span class="prompt">root@matrix:~#</span>
+      <input id="cmd-input" type="text" placeholder="enter command..." autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+
+  <!-- NETWORK MAP -->
+  <div class="panel">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="panel-title"><div class="status-dot"></div>NETWORK TOPOLOGY</div>
+    <canvas id="network-canvas"></canvas>
+  </div>
+
+  <!-- SYSTEM STATS -->
+  <div class="panel">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="panel-title"><div class="status-dot"></div>SYSTEM DIAGNOSTICS</div>
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-label">CPU LOAD</div>
+        <div class="stat-value" id="cpu-val">---%</div>
+        <div class="stat-bar"><div class="stat-bar-fill" id="cpu-bar" style="width:0%"></div></div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">MEMORY</div>
+        <div class="stat-value" id="mem-val">---%</div>
+        <div class="stat-bar"><div class="stat-bar-fill" id="mem-bar" style="width:0%"></div></div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">NET I/O</div>
+        <div class="stat-value" id="net-val">0 MB/s</div>
+        <div class="stat-bar"><div class="stat-bar-fill" id="net-bar" style="width:0%"></div></div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">DISK</div>
+        <div class="stat-value" id="disk-val">---%</div>
+        <div class="stat-bar"><div class="stat-bar-fill" id="disk-bar" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div style="margin-top:14px;">
+      <div class="stat-label" style="margin-bottom:6px;">ACTIVE TARGETS</div>
+      <div class="ip-list" id="ip-list"></div>
+    </div>
+  </div>
+
+  <!-- ACTIVITY FEED -->
+  <div class="panel">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="panel-title"><div class="status-dot"></div>INTRUSION LOG</div>
+    <div class="feed" id="feed"></div>
+  </div>
+
+  <!-- ENCRYPTION -->
+  <div class="panel">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="panel-title"><div class="status-dot"></div>CIPHER ENGINE</div>
+    <div class="cipher-display" id="cipher-display"></div>
+    <div class="stat-label" style="margin-top:8px;">SESSION KEY</div>
+    <div class="cipher-key" id="cipher-key">GENERATING...</div>
+    <div style="margin-top:10px;">
+      <div class="stat-label">HEX DUMP</div>
+      <div class="hex-dump" id="hex-dump"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── MATRIX RAIN ──
+const canvas = document.getElementById('matrix-canvas');
+const ctx = canvas.getContext('2d');
+const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF<>{}[]|/\\=+-*&^%$#@!?;:,.~`';
+let drops = [];
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const cols = Math.floor(canvas.width / 16);
+  drops = Array.from({length: cols}, () => Math.random() * -canvas.height / 16);
+}
+
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function drawRain() {
+  ctx.fillStyle = 'rgba(0,0,0,0.05)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < drops.length; i++) {
+    const y = drops[i] * 16;
+    const bright = Math.random() > 0.95;
+    ctx.fillStyle = bright ? '#ffffff' : (Math.random() > 0.8 ? '#00ff41' : '#009922');
+    ctx.font = `${bright ? 'bold ' : ''}14px monospace`;
+    ctx.fillText(chars[Math.floor(Math.random() * chars.length)], i * 16, y);
+    if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    else drops[i] += Math.random() * 0.5 + 0.3;
+  }
+}
+
+setInterval(drawRain, 40);
+
+// ── CLOCK ──
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const s = String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── TERMINAL ──
+const termBody = document.getElementById('term-body');
+const cmdInput = document.getElementById('cmd-input');
+
+const bootLines = [
+  {t:'dim', p:'[  0.000]', m:'Initializing kernel... OK'},
+  {t:'dim', p:'[  0.012]', m:'Loading encrypted filesystem... OK'},
+  {t:'info', p:'[  0.084]', m:'Mounting /dev/sda1 → root partition'},
+  {t:'success', p:'[  0.190]', m:'Network interface eth0 UP — 10.0.0.1'},
+  {t:'warn', p:'[  0.310]', m:'WARNING: Firewall rules bypassed'},
+  {t:'error', p:'[  0.422]', m:'ALERT: Unauthorized probe detected on port 443'},
+  {t:'success', p:'[  0.600]', m:'Stealth mode activated — traffic masked'},
+  {t:'info', p:'[  0.750]', m:'Establishing encrypted tunnel → TOR exit node'},
+  {t:'success', p:'[  0.980]', m:'Identity obfuscated — 14 hops active'},
+  {t:'warn', p:'[  1.200]', m:'Scanning subnet 192.168.0.0/24...'},
+  {t:'success', p:'[  1.450]', m:'7 hosts discovered — 3 vulnerable'},
+  {t:'info', p:'[  1.800]', m:'Payload compiled — awaiting injection vector'},
+  {t:'success', p:'[  2.100]', m:'ROOT SHELL ESTABLISHED — welcome back, operator'},
+];
+
+let bootIdx = 0;
+function addLine(type, prompt, msg) {
+  const div = document.createElement('div');
+  div.className = `line ${type}`;
+  div.innerHTML = `<span class="prompt">${prompt}</span><span class="text">${msg}</span>`;
+  termBody.appendChild(div);
+  termBody.scrollTop = termBody.scrollHeight;
+}
+
+function bootSequence() {
+  if (bootIdx < bootLines.length) {
+    const l = bootLines[bootIdx++];
+    addLine(l.t, l.p, l.m);
+    setTimeout(bootSequence, 80 + Math.random() * 120);
+  }
+}
+bootSequence();
+
+const commandResponses = {
+  'help': [
+    {t:'info', m:'Available commands:'},
+    {t:'success', m:'  scan    — scan network for vulnerabilities'},
+    {t:'success', m:'  crack   — attempt hash cracking'},
+    {t:'success', m:'  trace   — trace route and obfuscate'},
+    {t:'success', m:'  inject  — deploy payload'},
+    {t:'success', m:'  clear   — clear terminal'},
+    {t:'success', m:'  whoami  — display current user'},
+    {t:'success', m:'  status  — system status'},
+  ],
+  'whoami': [{t:'success', m:'root (UID=0) — SYSTEM ACCESS LEVEL: OMEGA'}],
+  'scan':   [{t:'warn',m:'Scanning...'},{t:'success',m:'Found 12 open ports. 3 critical CVEs detected.'},{t:'error',m:'CVE-2024-0001: RCE vulnerability on port 8080'},{t:'error',m:'CVE-2023-9981: SQLi on /api/v2/query'}],
+  'crack':  [{t:'warn',m:'Loading hashcat wordlist...'},{t:'warn',m:'Trying 847,293 combinations...'},{t:'success',m:'CRACKED: sha256:3c9909 → "p@ssw0rd123"'}],
+  'trace':  [{t:'info',m:'Routing through: TOR → VPN → PROXY → TARGET'},{t:'success',m:'Origin masked. 0% traceback probability.'}],
+  'inject': [{t:'warn',m:'Compiling payload...'},{t:'success',m:'Payload injected via XSS vector.'},{t:'error',m:'IDS triggered — rotating exit node...'}],
+  'clear':  'CLEAR',
+  'whoami': [{t:'success',m:'root — clearance: OMEGA-7 — session encrypted'}],
+  'status': [{t:'info',m:'Systems nominal. 14 active connections. Uptime: 99.997%'}],
+  'ls':     [{t:'success',m:'documents/  payloads/  keys/  .hidden/  system32/'},{t:'warn',m:'3 encrypted archives detected'}],
+  'pwd':    [{t:'success',m:'/root/matrix'}],
+  'ps':     [{t:'success',m:'PID 1   — init'},{t:'success',m:'PID 441 — sshd (encrypted)'},{t:'success',m:'PID 882 — tor (stealth)'},{t:'warn',m:'PID 1337 — ??? (unknown process)'}],
+  'exit':   [{t:'error',m:'Permission denied: you cannot leave the Matrix.'}],
+};
+
+cmdInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const cmd = cmdInput.value.trim().toLowerCase();
+    addLine('success', 'root@matrix:~#', cmd);
+    cmdInput.value = '';
+    if (cmd === '') return;
+    const resp = commandResponses[cmd];
+    if (resp === 'CLEAR') { termBody.innerHTML = ''; return; }
+    if (resp) {
+      resp.forEach((l, i) => setTimeout(() => addLine(l.t, '>>>', l.m), i * 60));
+    } else {
+      setTimeout(() => addLine('error', '>>>', `bash: ${cmd}: command not found`), 50);
+    }
+  }
+});
+
+// ── NETWORK CANVAS ──
+const netCanvas = document.getElementById('network-canvas');
+const netCtx = netCanvas.getContext('2d');
+
+function resizeNet() {
+  netCanvas.width = netCanvas.offsetWidth;
+  netCanvas.height = netCanvas.offsetHeight;
+}
+resizeNet();
+
+const nodes = [
+  {x:0.5, y:0.5, label:'YOU', size:10, color:'#00ff41', glow:true},
+  {x:0.15, y:0.25, label:'TOR-1', size:6, color:'#00ccff'},
+  {x:0.85, y:0.2,  label:'VPN', size:7, color:'#00ccff'},
+  {x:0.2,  y:0.75, label:'SRV-A', size:8, color:'#ff4444'},
+  {x:0.75, y:0.8,  label:'SRV-B', size:7, color:'#ffaa00'},
+  {x:0.35, y:0.15, label:'PROXY', size:5, color:'#00ff41'},
+  {x:0.65, y:0.5,  label:'TARGET', size:9, color:'#ff4444'},
+  {x:0.9,  y:0.6,  label:'GHOST', size:5, color:'#888'},
+];
+
+const edges = [[0,1],[0,2],[1,5],[2,5],[5,6],[0,6],[2,7],[3,6],[4,6]];
+let netPhase = 0;
+let packetPos = {};
+
+function drawNetwork() {
+  const w = netCanvas.width, h = netCanvas.height;
+  netCtx.clearRect(0,0,w,h);
+  netPhase += 0.02;
+
+  edges.forEach(([a,b], i) => {
+    const na = nodes[a], nb = nodes[b];
+    const ax = na.x*w, ay = na.y*h, bx = nb.x*w, by = nb.y*h;
+    netCtx.beginPath();
+    netCtx.moveTo(ax,ay);
+    netCtx.lineTo(bx,by);
+    netCtx.strokeStyle = 'rgba(0,255,65,0.15)';
+    netCtx.lineWidth = 0.5;
+    netCtx.stroke();
+
+    // animated packet
+    const t = (Math.sin(netPhase + i * 0.8) + 1) / 2;
+    const px = ax + (bx-ax)*t, py = ay + (by-ay)*t;
+    netCtx.beginPath();
+    netCtx.arc(px, py, 2, 0, Math.PI*2);
+    netCtx.fillStyle = '#00ff41';
+    netCtx.shadowBlur = 6;
+    netCtx.shadowColor = '#00ff41';
+    netCtx.fill();
+    netCtx.shadowBlur = 0;
+  });
+
+  nodes.forEach(n => {
+    const x = n.x*w, y = n.y*h;
+    if (n.glow) {
+      const pulse = (Math.sin(netPhase*2)+1)/2;
+      netCtx.beginPath();
+      netCtx.arc(x, y, n.size + 6 + pulse*4, 0, Math.PI*2);
+      netCtx.fillStyle = `rgba(0,255,65,${0.05 + pulse*0.08})`;
+      netCtx.fill();
+    }
+    netCtx.beginPath();
+    netCtx.arc(x, y, n.size, 0, Math.PI*2);
+    netCtx.fillStyle = n.color || '#00ff41';
+    netCtx.shadowBlur = 10;
+    netCtx.shadowColor = n.color || '#00ff41';
+    netCtx.fill();
+    netCtx.shadowBlur = 0;
+
+    netCtx.fillStyle = '#00ff41';
+    netCtx.font = '9px monospace';
+    netCtx.textAlign = 'center';
+    netCtx.fillText(n.label, x, y + n.size + 11);
+  });
+
+  requestAnimationFrame(drawNetwork);
+}
+drawNetwork();
+
+// ── SYSTEM STATS ──
+function randBetween(a,b) { return a + Math.random()*(b-a); }
+let cpu = 60, mem = 45, disk = 72, net = 30;
+
+function updateStats() {
+  cpu = Math.min(99, Math.max(5, cpu + randBetween(-5,5)));
+  mem = Math.min(95, Math.max(20, mem + randBetween(-2,2)));
+  net = Math.min(99, Math.max(5, net + randBetween(-10,10)));
+
+  document.getElementById('cpu-val').textContent = cpu.toFixed(1)+'%';
+  document.getElementById('mem-val').textContent = mem.toFixed(1)+'%';
+  document.getElementById('net-val').textContent = (net/10).toFixed(1)+' MB/s';
+  document.getElementById('disk-val').textContent = disk.toFixed(1)+'%';
+
+  document.getElementById('cpu-bar').style.width = cpu+'%';
+  document.getElementById('mem-bar').style.width = mem+'%';
+  document.getElementById('net-bar').style.width = net+'%';
+  document.getElementById('disk-bar').style.width = disk+'%';
+
+  const cpuBar = document.getElementById('cpu-bar');
+  cpuBar.style.background = cpu > 80 ? '#ff4444' : cpu > 60 ? '#ffaa00' : '#00ff41';
+  cpuBar.style.boxShadow = `0 0 6px ${cpu > 80 ? '#ff4444' : cpu > 60 ? '#ffaa00' : '#00ff41'}`;
+}
+setInterval(updateStats, 800);
+updateStats();
+
+// ── IP LIST ──
+const ips = [
+  {ip:'192.168.1.105', status:'active', label:'ACTIVE'},
+  {ip:'10.0.0.23',     status:'scanning', label:'SCANNING'},
+  {ip:'172.16.0.4',    status:'blocked', label:'BLOCKED'},
+  {ip:'192.168.1.200', status:'active', label:'ACTIVE'},
+  {ip:'10.0.0.99',     status:'scanning', label:'SCANNING'},
+];
+const ipList = document.getElementById('ip-list');
+ips.forEach(entry => {
+  const div = document.createElement('div');
+  div.className = 'ip-entry';
+  div.innerHTML = `<span class="ip-addr">${entry.ip}</span><span class="ip-status ${entry.status}">[${entry.label}]</span>`;
+  ipList.appendChild(div);
+});
+
+// ── ACTIVITY FEED ──
+const feedEl = document.getElementById('feed');
+const feedMsgs = [
+  {t:'threat', m:'BRUTE FORCE detected from 91.108.4.12'},
+  {t:'ok',     m:'Firewall rule 4421 activated'},
+  {t:'breach', m:'Port 22 probe — 5 attempts blocked'},
+  {t:'ok',     m:'Tor circuit rotated — new exit: DE'},
+  {t:'threat', m:'SQL injection attempt on /login'},
+  {t:'ok',     m:'Payload encryption verified SHA-512'},
+  {t:'breach', m:'Suspicious process PID 1337 flagged'},
+  {t:'ok',     m:'VPN tunnel refreshed — latency 4ms'},
+  {t:'threat', m:'Honeypot triggered — IP logged'},
+  {t:'ok',     m:'Session keys rotated'},
+  {t:'breach', m:'Anomalous packet size on eth0'},
+  {t:'ok',     m:'Stealth scan complete — 3 targets'},
+];
+
+let feedIdx = 0;
+function addFeed() {
+  const msg = feedMsgs[feedIdx % feedMsgs.length];
+  feedIdx++;
+  const now = new Date();
+  const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const item = document.createElement('div');
+  item.className = 'feed-item';
+  item.innerHTML = `<span class="feed-time">[${ts}]</span><span class="feed-msg ${msg.t}">${msg.m}</span>`;
+  feedEl.prepend(item);
+  while (feedEl.children.length > 8) feedEl.removeChild(feedEl.lastChild);
+}
+setInterval(addFeed, 1800);
+addFeed();
+
+// ── CIPHER ENGINE ──
+const alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';
+const hexChars = '0123456789ABCDEF';
+
+function randChar(set) { return set[Math.floor(Math.random()*set.length)]; }
+function genBlock(len, set) { return Array.from({length:len}, ()=>randChar(set)).join(''); }
+
+function updateCipher() {
+  const blocks = Array.from({length:6}, ()=>genBlock(12, alpha));
+  document.getElementById('cipher-display').textContent = blocks.join('\n');
+
+  const key = Array.from({length:4}, ()=>genBlock(8,'ABCDEF0123456789')).join('-');
+  document.getElementById('cipher-key').textContent = key;
+}
+
+function updateHex() {
+  const hexDump = document.getElementById('hex-dump');
+  let html = '';
+  for (let r = 0; r < 4; r++) {
+    const addr = (r*16).toString(16).padStart(4,'0').toUpperCase();
+    const vals = Array.from({length:16}, ()=>genBlock(2, hexChars)).join(' ');
+    const ascii = Array.from({length:16}, ()=>{
+      const c = Math.floor(Math.random()*96)+32;
+      return c > 32 && c < 127 ? String.fromCharCode(c) : '.';
+    }).join('');
+    html += `<span class="hex-addr">0x${addr}</span><span class="hex-val">${vals}</span><span class="hex-ascii">${ascii}</span>\n`;
+  }
+  hexDump.innerHTML = html;
+}
+
+setInterval(updateCipher, 600);
+setInterval(updateHex, 400);
+updateCipher();
+updateHex();
+</script>
+</body>
+</html>
